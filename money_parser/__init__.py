@@ -14,14 +14,11 @@ _not_defined = object()
 
 def price_str(raw_price, default=_not_defined, dec_point='.'):
     """Search and clean price value.
-
     Convert raw price string presented in any localization
     as a valid number string with an optional decimal point.
-
     If raw price does not contain valid price value or contains
     more than one price value, then return default value.
     If default value not set, then raise ValueError.
-
     Examples:
         12.007          => 12007
         00012,33        => 12.33
@@ -36,7 +33,6 @@ def price_str(raw_price, default=_not_defined, dec_point='.'):
           42  \t \n     => 42
                         => <default>
         1...2           => <default>
-
     :param str raw_price: string that contains price value.
     :param default: value that will be returned if raw price not valid.
     :param str dec_point: symbol that separate integer and fractional parts.
@@ -55,70 +51,71 @@ def price_str(raw_price, default=_not_defined, dec_point='.'):
             '(expected type "str")'.format(price_type=type(raw_price)))
 
     price = re.sub('\s', '', raw_price)
-    cleaned_price = _CLEANED_PRICE_RE.findall(price)
+    cleaned_prices = _CLEANED_PRICE_RE.findall(price)
 
-    if len(cleaned_price) == 0:
+    if len(cleaned_prices) == 0:
         return _error_or_default(
             'Raw price value "{price}" does not contain '
             'valid price digits'.format(price=raw_price))
+    
+    prices = list()
+    
+    for cleaned_price in cleaned_prices:
 
-    if len(cleaned_price) > 1:
-        return _error_or_default(
-            'Raw price value "{price}" contains '
-            'more than one price value'.format(price=raw_price))
+        price = cleaned_price
 
-    price = cleaned_price[0]
+        # clean truncated decimal (e.g. 99. -> 99)
+        price = price.rstrip('.,')
 
-    # clean truncated decimal (e.g. 99. -> 99)
-    price = price.rstrip('.,')
+        # get sign
+        sign = ''
+        if price[0] in {'-', '+'}:
+            sign, price = price[0], price[1:]
+            sign = '-' if sign == '-' else ''
 
-    # get sign
-    sign = ''
-    if price[0] in {'-', '+'}:
-        sign, price = price[0], price[1:]
-        sign = '-' if sign == '-' else ''
+        # extract fractional digits
+        fractional = _FRACTIONAL_PRICE_RE.match(price)
+        if fractional:
+            integer, fraction = fractional.groups()
+        else:
+            integer, fraction = price, ''
 
-    # extract fractional digits
-    fractional = _FRACTIONAL_PRICE_RE.match(price)
-    if fractional:
-        integer, fraction = fractional.groups()
-    else:
-        integer, fraction = price, ''
+        # leave only digits in the integer part of the price
+        integer = re.sub('\D', '', integer)
 
-    # leave only digits in the integer part of the price
-    integer = re.sub('\D', '', integer)
+        # remove leading zeros (e.g. 007 -> 7, but 0.1 -> 0.1)
+        integer = integer.lstrip('0')
+        if integer == '':
+            integer = '0'
 
-    # remove leading zeros (e.g. 007 -> 7, but 0.1 -> 0.1)
-    integer = integer.lstrip('0')
-    if integer == '':
-        integer = '0'
+        # construct price
+        price = sign + integer
+        if fraction:
+            price = ''.join((price, dec_point, fraction))
+        
+        prices.append(price)
 
-    # construct price
-    price = sign + integer
-    if fraction:
-        price = ''.join((price, dec_point, fraction))
-
-    return price
+    return prices
 
 
 def price_dec(raw_price, default=_not_defined):
     """Price decimal value from raw string.
-
     Extract price value from input raw string and
     present as Decimal number.
-
     If raw price does not contain valid price value or contains
     more than one price value, then return default value.
     If default value not set, then raise ValueError.
-
     :param str raw_price: string that contains price value.
     :param default: value that will be returned if raw price not valid.
     :return: Decimal price value.
     :raise ValueError: error if raw price not valid and default value not set.
     """
     try:
-        price = price_str(raw_price)
-        return decimal.Decimal(price)
+        cleaned_prices = price_str(raw_price)
+        prices = list()
+        for cleaned_price in cleaned_prices:
+            prices.append(decimal.Decimal(cleaned_price))
+        return prices
 
     except ValueError as err:
         if default == _not_defined:
